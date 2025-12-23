@@ -1,10 +1,9 @@
 import type { EventBus } from "../event-bus/EventBus";
-export type MFEContext = {
-    /** identity của microFE hiện tại */
+export interface MFEContext<S = any> {
     name: string;
+    stores: S;
     eventBus: EventBus<any>;
-    stores: Record<string, any>;
-    host?: {
+    host: {
         navigate?: (path: string) => void;
     };
-};
+}

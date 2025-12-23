@@ -1,6 +1,6 @@
 {
   "name": "mfe-runtime-z",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Framework-agnostic micro-frontend runtime (host, event bus, shared state, router sync)",
   "main": "build/index.js",
   "module": "build/index.esm.js",

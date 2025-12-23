@@ -1,6 +1,5 @@
-import { MFEContext } from "./MFEContext";
-export type RemoteApp = {
+export interface RemoteApp<C = any> {
     name?: string;
-    mount: (el: HTMLElement, ctx: MFEContext) => void;
-    unmount?: (el: HTMLElement) => void;
-};
+    mount: (el: HTMLElement | ShadowRoot, ctx: C) => void;
+    unmount?: (el: HTMLElement | ShadowRoot) => void;
+}

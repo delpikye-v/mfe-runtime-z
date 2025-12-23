@@ -24,11 +24,11 @@ This library focuses on **application-level integration**, not component sharing
 #### What it solves
 
 - Load and mount remote applications dynamically
-- Isolate application lifecycles (mount / unmount / reload)
+- Isolate application lifecycles (mount/unmount/reload) ✅ via Shadow DOM
 - Share state safely between apps
 - Synchronize routing without sharing router instances
 - Communicate via a central event bus
-- Work with **any framework** (React, Vue, Svelte, Vanilla JS)
+- Work with **any framework** (React, Vue, Svelte, Vanilla JS...)
 
 ---
 
@@ -55,13 +55,11 @@ yarn add mfe-runtime-z
 Micro-frontends expose a simple runtime contract:
 
 ```ts
-window.myRemoteApp = {
-  mount(el, ctx),
-  unmount(el)
-}
+window.myRemoteApp = { mount(el, ctx), unmount(el) }
 ```
 
-No framework or bundler assumptions.
+- No framework or bundler assumptions.
+- Compatible with React, Vue, Vanilla JS
 
 ---
 
@@ -72,112 +70,93 @@ No framework or bundler assumptions.
 ```ts
 import { MFEHost, createSharedStore } from "mfe-runtime-z"
 
-const authStore = createSharedStore({
-  user: null
-})
+// shared store example
+const authStore = createSharedStore({ user: null })
 
+// create host with isolate: true for Shadow DOM + error isolation
 const host = new MFEHost({
   stores: { auth: authStore },
-  navigate: (path) => history.pushState({}, "", path)
+  navigate: (path) => history.pushState({}, "", path),
+  isolate: false, // => shadow
+  onRemoteError: (err) => console.error("Remote error:", err)
 })
 
-const remote = await host.load(
-  "http://localhost:3001/remote.js",
-  "productApp"
-)
+// load remote apps
+const productRemote = await host.load("http://localhost:3001/remote.js", "productApp")
+const cartRemote = await host.load("http://localhost:3002/remote.js", "cartApp")
 
-host.mount(remote, document.getElementById("app"), "productApp")
+// mount remotes into host container divs
+host.mount(productRemote, document.getElementById("product-root")!, "productApp", { isolate: true }) // shadow
+host.mount(cartRemote, document.getElementById("cart-root")!, "cartApp")
 
-// host.unmount(remote, document.getElementById("app"), "productApp")
+// // Unmount Shadow DOM remote
+// host.unmount(productRemote, document.getElementById("product-root")!, "productApp")
+// // Unmount normal remote
+// host.unmount(cartRemote, document.getElementById("cart-root")!, "cartApp")
+
 ```
-
----
 
 ##### Remote application (framework-agnostic)
 
 ```ts
-export function mount(el, ctx) {
-  const authStore = ctx.stores.auth
-
-  authStore.subscribe((state) => {
-    el.innerHTML = state.user
-      ? `Hello ${state.user.name}`
-      : `<button id="login">Login</button>`
-
-    el.querySelector("#login")?.addEventListener("click", () => {
-      authStore.setState({
-        user: { id: "1", name: "Alice" }
-      })
-    })
-  })
+export function mount(el: ShadowRoot) {
+  let count = 0
+  const div = document.createElement("div")
+  const btn = document.createElement("button")
+  const p = document.createElement("p")
+  btn.textContent = "Add Item"
+  p.textContent = count.toString()
+  btn.onclick = () => (p.textContent = (++count).toString())
+  div.appendChild(btn)
+  div.appendChild(p)
+  el.appendChild(div)
 }
 
-export function unmount(el) {
+export function unmount(el: ShadowRoot) {
   el.innerHTML = ""
 }
 
-window.productApp = { mount, unmount }
+;(window as any).cartApp = { mount, unmount }
 ```
 
 ##### Remote app (framework-react-library)
 
 ```ts
-// src/app.tsx
 import React from "react"
 import ReactDOM from "react-dom/client"
 
 type AuthStore = {
   user: { id: string; name: string } | null
-  subscribe: (callback: (state: any) => void) => void
-  setState: (newState: any) => void
+  subscribe: (cb: (state:any)=>void)=>void
+  setState: (s:any)=>void
 }
 
-// React component
 function App({ store }: { store: AuthStore }) {
   const [user, setUser] = React.useState(store.user)
-
   React.useEffect(() => {
-    const unsubscribe = store.subscribe((state: any) => {
-      setUser(state.user)
-    })
-    return () => unsubscribe?.()
+    const unsub = store.subscribe((state:any) => setUser(state.user))
+    return () => unsub?.()
   }, [store])
-
-  const handleLogin = () => {
-    store.setState({ user: { id: "1", name: "Alice" } })
-  }
-
   return (
     <div>
-      {user ? (
-        <span>Hello {user.name}</span>
-      ) : (
-        <button id="login" onClick={handleLogin}>
-          Login
-        </button>
-      )}
+      {user ? <span>Hello {user.name}</span> : <button onClick={()=>store.setState({user:{id:"1",name:"Alice"}})}>Login</button>}
     </div>
   )
 }
 
-// index.js
-// mount/unmount functions
-export function mount(el: HTMLElement, ctx: { stores: { auth: AuthStore } }) {
-  const root = ReactDOM.createRoot(el)
+// mount/unmount compatible with Shadow DOM
+export function mount(el: HTMLElement | ShadowRoot, ctx: { stores: { auth: AuthStore } }) {
+  const root = ReactDOM.createRoot(el as unknown as HTMLElement)
   ;(el as any)._reactRoot = root
   root.render(<App store={ctx.stores.auth} />)
 }
 
-export function unmount(el: HTMLElement) {
+export function unmount(el: HTMLElement | ShadowRoot) {
   const root = (el as any)._reactRoot
-  if (root) {
-    root.unmount()
-  }
+  if (root) root.unmount()
   el.innerHTML = ""
 }
 
-
-// expose mount/unmount to window
 ;(window as any).productApp = { mount, unmount }
 ```
 
@@ -187,17 +166,11 @@ export function unmount(el: HTMLElement) {
 
 ```ts
 const store = createSharedStore({ count: 0 })
-
-store.subscribe((state) => {
-  console.log(state.count)
-})
-
+store.subscribe((state) => console.log(state.count))
 store.setState({ count: 1 })
 ```
 
-- Push-based
-- No Redux
-- No shared framework state
+- Push-based, no Redux, no shared framework state
 
 ---
 
@@ -207,12 +180,9 @@ store.setState({ count: 1 })
 import { createSharedRouter } from "mfe-runtime-z"
 
 const router = createSharedRouter(ctx)
-
 router.go("/cart")
+router.onChange((path) => console.log("navigated to", path))
 
-router.onChange((path) => {
-  console.log("navigated to", path)
-})
 ```
 
 - Intent-based navigation
@@ -251,7 +221,7 @@ import { mount, unmount } from "./app"
 ;(window as any).productApp = { mount, unmount }
 ```
 
-👉 That’s it. `This file can be served from any CDN or server and loaded at runtime.`
+👉 Copy-paste ✅: minimal remote build, browser-loadable, no Module Federation.
 
 ---
 
@@ -315,6 +285,7 @@ if (import.meta.env.DEV) {
 - Shared state with subscriptions
 - Router synchronization
 - Hot reload support for remote apps
+- Shadow DOM + error isolation (optional via isolate: true)
 - No build-time federation required
 
 ---
@@ -324,6 +295,22 @@ if (import.meta.env.DEV) {
 - ❌ Not a UI component library
 - ❌ Not a replacement for React/Vue routers
 - ❌ Not a build-time module federation tool
+
+---
+
+### Micro-Frontend Runtime Comparison
+
+| Feature / Lib                       | **mfe-runtime-z**  | Module Federation (Webpack 5)   | single-spa       | qiankun          |
+| ----------------------------------- | -------------------| ------------------------------- | ---------------- | ---------------- |
+| **Framework-agnostic**              | ✅ Yes             | ❌ Mostly Webpack/JS            | ✅ Yes            | ✅ Yes           |
+| **Runtime loading**                 | ✅ Yes             | ❌ Build-time federation only   | ✅ Yes            | ✅ Yes           |
+| **Shadow DOM support**              | ✅ Optional        | ❌ Not built-in                 | ❌ Not built-in   | ✅ Partial       |
+| **Shared state / EventBus**         | ✅ Yes             | ❌ Requires external            | ✅ Yes            | ✅ Yes           |
+| **Dynamic mount/unmount**           | ✅ Yes             | ❌ Build-time                   | ✅ Yes            | ✅ Yes           |
+| **Dev HMR support**                 | ✅ Yes             | ❌ Limited                      | ⚠️ Needs plugin   | ⚠️ Needs plugin  |
+| **Bundle size**                     | 🟢 Lightweight     | ⚠️ Depends on Webpack setup     | 🟡 Medium         | 🟡 Medium        |
+| **Learning curve**                  | 🟢 Simple          | ⚠️ Medium                       | ⚠️ Medium         | ⚠️ Medium        |
+| **Build-time federation required?** | ❌ No              | ✅ Yes                          | ❌ No             | ❌ No            |
 
 ---
 

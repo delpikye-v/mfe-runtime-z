@@ -167,16 +167,19 @@ function enableRouterSync(eventBus, navigate) {
 var MFEHost = /** @class */ (function () {
     function MFEHost(options) {
         if (options === void 0) { options = {}; }
-        var _a;
+        var _a, _b;
         this.eventBus = new EventBus();
+        this.isolate = false;
         this.stores = (_a = options.stores) !== null && _a !== void 0 ? _a : {};
         this.navigate = options.navigate;
         this.onRemoteError = options.onRemoteError;
+        this.fallback = options.fallback;
+        this.isolate = (_b = options.isolate) !== null && _b !== void 0 ? _b : false;
         if (this.navigate) {
             enableRouterSync(this.eventBus, this.navigate);
         }
     }
-    /** load script only */
+    /** Load remote JS only */
     MFEHost.prototype.load = function (url, global) {
         var _a, _b;
         return __awaiter(this, void 0, void 0, function () {
@@ -205,58 +208,85 @@ var MFEHost = /** @class */ (function () {
             });
         });
     };
-    /** mount with identity */
-    MFEHost.prototype.mount = function (remote, el, name) {
-        var _a;
+    /** Mount remote with optional Shadow DOM isolation */
+    MFEHost.prototype.mount = function (remote, el, name, options) {
+        var _a, _b;
+        var isolate = (_a = options === null || options === void 0 ? void 0 : options.isolate) !== null && _a !== void 0 ? _a : this.isolate;
+        var mountEl = el;
+        // Shadow DOM isolation
+        if (isolate) {
+            if (el._shadowRoot)
+                el._shadowRoot.innerHTML = "";
+            var mode = (_b = options === null || options === void 0 ? void 0 : options.shadowMode) !== null && _b !== void 0 ? _b : "open";
+            // @ts-ignore
+            var shadow = el.attachShadow({ mode: mode })(el)._shadowRoot = shadow;
+            // For React/Vue remotes, create container div
+            var container = document.createElement("div");
+            shadow.appendChild(container);
+            // @ts-ignore
+            mountEl = container(el)._mountEl = container;
+        }
         var ctx = {
             name: name,
-            eventBus: this.eventBus,
             stores: this.stores,
-            host: {
-                navigate: this.navigate,
-            },
+            eventBus: this.eventBus,
+            host: { navigate: this.navigate },
         };
         try {
-            remote.mount(el, ctx);
-            console.log("[MFE] mounted ".concat(name));
+            remote.mount(mountEl, ctx);
+            console.log("[MFE] mounted ".concat(name, " ").concat(isolate ? "(shadow)" : ""));
         }
         catch (err) {
-            (_a = this.onRemoteError) === null || _a === void 0 ? void 0 : _a.call(this, err);
-            throw err;
+            var error = err;
+            console.error("[MFE] remote ".concat(name, " mount failed:"), error);
+            if (this.onRemoteError)
+                this.onRemoteError(error);
+            if (this.fallback) {
+                this.fallback(mountEl, name, error, ctx);
+            }
+            else {
+                mountEl.innerHTML = "<div style=\"color:red\">Failed to load ".concat(name, "</div>");
+            }
         }
     };
+    /** Unmount remote */
     MFEHost.prototype.unmount = function (remote, el, name) {
-        var _a, _b;
+        var _a, _b, _c, _d;
         try {
-            (_a = remote.unmount) === null || _a === void 0 ? void 0 : _a.call(remote, el);
-            name && console.log("[MFE] unmounted ".concat(name));
+            var mountEl = (_a = el._mountEl) !== null && _a !== void 0 ? _a : (this.isolate ? (_b = el.shadowRoot) !== null && _b !== void 0 ? _b : el : el);
+            (_c = remote.unmount) === null || _c === void 0 ? void 0 : _c.call(remote, mountEl);
+            delete el._mountEl;
+            if (name)
+                console.log("[MFE] unmounted ".concat(name));
         }
         catch (err) {
-            (_b = this.onRemoteError) === null || _b === void 0 ? void 0 : _b.call(this, err);
+            (_d = this.onRemoteError) === null || _d === void 0 ? void 0 : _d.call(this, err);
         }
     };
+    /** Get central event bus */
     MFEHost.prototype.getEventBus = function () {
         return this.eventBus;
     };
-    /** 🔥 reload = unmount + reload script + mount (KEEP name) */
+    /** Reload remote: unmount + reload script + mount again */
     MFEHost.prototype.reloadRemote = function (options) {
-        var _a;
+        var _a, _b, _c;
         return __awaiter(this, void 0, void 0, function () {
-            var name, url, global, el, oldRemote, newRemote;
-            return __generator(this, function (_b) {
-                switch (_b.label) {
+            var name, url, global, el, isolate, oldRemote, mountEl, newRemote;
+            return __generator(this, function (_d) {
+                switch (_d.label) {
                     case 0:
-                        name = options.name, url = options.url, global = options.global, el = options.el;
-                        oldRemote = window[global];
+                        name = options.name, url = options.url, global = options.global, el = options.el, isolate = options.isolate;
                         try {
-                            (_a = oldRemote === null || oldRemote === void 0 ? void 0 : oldRemote.unmount) === null || _a === void 0 ? void 0 : _a.call(oldRemote, el);
+                            oldRemote = window[global];
+                            mountEl = (_a = el._mountEl) !== null && _a !== void 0 ? _a : ((isolate !== null && isolate !== void 0 ? isolate : this.isolate) ? (_b = el.shadowRoot) !== null && _b !== void 0 ? _b : el : el);
+                            (_c = oldRemote === null || oldRemote === void 0 ? void 0 : oldRemote.unmount) === null || _c === void 0 ? void 0 : _c.call(oldRemote, mountEl);
                         }
-                        catch (_c) { }
+                        catch (_e) { }
                         delete window[global];
                         return [4 /*yield*/, this.load("".concat(url, "?t=").concat(Date.now()), global)];
                     case 1:
-                        newRemote = _b.sent();
-                        this.mount(newRemote, el, name);
+                        newRemote = _d.sent();
+                        this.mount(newRemote, el, name, { isolate: isolate });
                         return [2 /*return*/];
                 }
             });
@@ -272,12 +302,17 @@ function createSharedStore(initial) {
         getState: function () {
             return state;
         },
+        /** Update state (shallow merge) */
         setState: function (partial) {
             state = __assign(__assign({}, state), partial);
-            listeners.forEach(function (l) { return l(state); });
+            listeners.forEach(function (listener) { return listener(state); });
         },
-        subscribe: function (fn) {
+        /** Subscribe to state changes */
+        subscribe: function (fn, callImmediately) {
+            if (callImmediately === void 0) { callImmediately = true; }
             listeners.add(fn);
+            if (callImmediately)
+                fn(state); // Immediately call listener with current state
             return function () { return listeners.delete(fn); };
         },
     };
