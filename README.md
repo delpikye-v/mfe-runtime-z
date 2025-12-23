@@ -6,7 +6,6 @@
 
 ---
 
-
 [![NPM](https://img.shields.io/npm/v/mfe-runtime-z.svg)](https://www.npmjs.com/package/mfe-runtime-z)
 [![JavaScript Style Guide](https://img.shields.io/badge/code_style-standard-brightgreen.svg)](https://standardjs.com)
 ![Downloads](https://img.shields.io/npm/dt/mfe-runtime-z.svg)
@@ -38,6 +37,7 @@ This library focuses on **application-level integration**, not component sharing
 npm install mfe-runtime-z
 # or
 yarn add mfe-runtime-z
+
 ```
 
 ---
@@ -71,7 +71,7 @@ window.myRemoteApp = { mount(el, ctx), unmount(el) }
 import { MFEHost, createSharedStore } from "mfe-runtime-z"
 
 // shared store example
-const authStore = createSharedStore({ user: null })
+const authStore = createSharedStore({ user: { name: 'name' } })
 
 // create host with isolate: true for Shadow DOM + error isolation
 const host = new MFEHost({
@@ -81,19 +81,22 @@ const host = new MFEHost({
   onRemoteError: (err) => console.error("Remote error:", err)
 })
 
-// load remote apps
-const productRemote = await host.load("http://localhost:3001/remote.js", "productApp")
-const cartRemote = await host.load("http://localhost:3002/remote.js", "cartApp")
+async function init() {
+  // load remote apps
+  const productRemote = await host.load("http://localhost:3001/remote.js", "productApp")
+  const cartRemote = await host.load("http://localhost:3002/remote.js", "cartApp")
 
-// mount remotes into host container divs
-host.mount(productRemote, document.getElementById("product-root")!, "productApp", { isolate: true }) // shadow
-host.mount(cartRemote, document.getElementById("cart-root")!, "cartApp")
+  // mount remotes into host container divs
+  host.mount(productRemote, document.getElementById("product-root")!, "productApp", { isolate: false }) // shadow
+  host.mount(cartRemote, document.getElementById("cart-root")!, "cartApp")
 
-// // Unmount Shadow DOM remote
-// host.unmount(productRemote, document.getElementById("product-root")!, "productApp")
-// // Unmount normal remote
-// host.unmount(cartRemote, document.getElementById("cart-root")!, "cartApp")
+  // // Unmount Shadow DOM remote
+  // host.unmount(productRemote, document.getElementById("product-root")!, "productApp")
+  // // Unmount normal remote
+  // host.unmount(cartRemote, document.getElementById("cart-root")!, "cartApp")
+}
 
+init()
 ```
 
 ##### Remote application (framework-agnostic)
@@ -119,45 +122,65 @@ export function unmount(el: ShadowRoot) {
 ;(window as any).cartApp = { mount, unmount }
 ```
 
-##### Remote app (framework-react-library)
+##### Remote application (framework-react-library)
 
 ```ts
 import React from "react"
 import ReactDOM from "react-dom/client"
+import { createSharedStore } from "mfe-runtime-z"
 
-type AuthStore = {
-  user: { id: string; name: string } | null
-  subscribe: (cb: (state:any)=>void)=>void
-  setState: (s:any)=>void
-}
+export const authStore = createSharedStore<{ user: { id: string; name: string } | null }>({
+  user: null,
+})
 
-function App({ store }: { store: AuthStore }) {
-  const [user, setUser] = React.useState(store.user)
+export default function App() {
+  const [user, setUser] = React.useState(authStore.getState().user)
+
   React.useEffect(() => {
-    const unsub = store.subscribe((state:any) => setUser(state.user))
-    return () => unsub?.()
-  }, [store])
+    const unsubscribe = authStore.subscribe((state) => setUser(state.user))
+    return () => unsubscribe()
+  }, [])
+
+  const handleLogin = () => {
+    authStore.setState({ user: { id: "1", name: "Alice" } })
+  }
+
+  const handleLogout = () => {
+    authStore.setState({ user: null })
+  }
+
   return (
     <div>
-      {user ? <span>Hello {user.name}</span> : <button onClick={()=>store.setState({user:{id:"1",name:"Alice"}})}>Login</button>}
+      {user ? (
+        <>
+          <span>Hello {user.name}</span>
+          <button onClick={handleLogout}>Logout</button>
+        </>
+      ) : (
+        <button onClick={handleLogin}>Login</button>
+      )}
     </div>
   )
 }
 
-// mount/unmount compatible with Shadow DOM
-export function mount(el: HTMLElement | ShadowRoot, ctx: { stores: { auth: AuthStore } }) {
-  const root = ReactDOM.createRoot(el as unknown as HTMLElement)
+// mount function
+export function mount(el: HTMLElement, ctx: any) {
+  const root = ReactDOM.createRoot(el)
   ;(el as any)._reactRoot = root
-  root.render(<App store={ctx.stores.auth} />)
+  // @ts-ignore
+  root.render(<App />) // <- ctx.stores.auth
 }
 
-export function unmount(el: HTMLElement | ShadowRoot) {
+// unmount function
+export function unmount(el: HTMLElement) {
   const root = (el as any)._reactRoot
-  if (root) root.unmount()
+  root?.unmount()
   el.innerHTML = ""
 }
 
+// expose to window
 ;(window as any).productApp = { mount, unmount }
+
 ```
 
 ---
@@ -165,9 +188,17 @@ export function unmount(el: HTMLElement | ShadowRoot) {
 ### Shared State
 
 ```ts
-const store = createSharedStore({ count: 0 })
-store.subscribe((state) => console.log(state.count))
-store.setState({ count: 1 })
+import { createSharedStore } from "mfe-runtime-z"
+
+export const store = createSharedStore({
+  auth: { user: null }
+})
+
+// Subscribe
+store.subscribe((state) => console.log("New state:", state))
+
+// Update
+store.setState({ auth: { user: { id: 1, name: "Alice" } } })
 ```
 
 - Push-based, no Redux, no shared framework state
@@ -179,9 +210,19 @@ store.setState({ count: 1 })
 ```ts
 import { createSharedRouter } from "mfe-runtime-z"
 
-const router = createSharedRouter(ctx)
+// Remote app context
+const router = createSharedRouter({ eventBus, name: "productApp" })
+
 router.go("/cart")
 router.onChange((path) => console.log("navigated to", path))
+
+// Listen route changes from host or other remotes
+router.onRouteChange((path) => {
+  console.log("Remote route changed:", path)
+})
+
+// Notify other remotes of route change
+router.emitRouteChange("/checkout")
 
 ```
 
@@ -223,11 +264,9 @@ import { mount, unmount } from "./app"
 
 👉 Copy-paste ✅: minimal remote build, browser-loadable, no Module Federation.
 
----
+### Dev HMR section
 
-#### Dev HMR section
-
-###### Host dev reload
+##### Host dev reload
 ```js
 import { MFEHost } from "mfe-runtime-z"
 import { createMFEReloadServer } from "mfe-runtime-z/dev"
@@ -251,7 +290,8 @@ if (process.env.NODE_ENV === "development") {
 
 ```
 
-###### Remote dev notify.
+##### Remote dev notify.
+
 ```ts
 // Only run in development
 if (import.meta.env.DEV) {
@@ -266,13 +306,20 @@ if (import.meta.env.DEV) {
 }
 ```
 
-✅ Summary of Comments
+---
 
-- Host side: sets up a WebSocket-based dev reload server that listens for changes from remotes and automatically reloads them without refreshing the host page.
+### Plugin API Summary
 
-- Remote side: connects to host WebSocket and sends a message when HMR triggers (code changed), so the host can remount the updated remote.
+| Method                                            | Description                                                                              |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `MFEHost.load(url, global)`                       | Load a remote JS bundle from URL.                                                        |
+| `MFEHost.mount(remote, el, name, options?)`       | Mount remote app into a container element, optionally in shadow DOM.                     |
+| `MFEHost.unmount(remote, el)`                     | Unmount a remote app.                                                                    |
+| `MFEHost.reloadRemote({ name, url, global, el })` | Reload a remote app (unmount + reload script + mount).                                   |
+| `MFEHost.getEventBus()`                           | Access central event bus for custom events.                                              |
+| `createSharedStore(initial)`                      | Create a shared state store with `getState()`, `setState()`, `subscribe()`.              |
+| `createSharedRouter({ eventBus, name })`          | Router helper: `go(path)`, `onChange(cb)`, `emitRouteChange(path)`, `onRouteChange(cb)`. |
 
-- Purpose: smooth dev experience for micro-frontends, framework-agnostic, avoids full page reload.
 
 ---
 
@@ -311,6 +358,38 @@ if (import.meta.env.DEV) {
 | **Bundle size**                     | 🟢 Lightweight     | ⚠️ Depends on Webpack setup     | 🟡 Medium         | 🟡 Medium        |
 | **Learning curve**                  | 🟢 Simple          | ⚠️ Medium                       | ⚠️ Medium         | ⚠️ Medium        |
 | **Build-time federation required?** | ❌ No              | ✅ Yes                          | ❌ No             | ❌ No            |
+
+---
+
+### Flowchart
+
+```css
+                ┌────────────────────┐
+                │       Host         │
+                │--------------------│
+                │  - stores          │
+                │  - eventBus        │
+                │  - navigate()      │
+                └────────────────────┘
+                          ▲
+                          │
+            ┌─────────────┴─────────────┐
+            │                           │
+  ROUTER / EVENTS                    SHARED STORE
+            │                           │
+            ▼                           ▼
+ ┌────────────────────┐         ┌────────────────────┐
+ │    Remote App A    │         │    Remote App B    │
+ │--------------------│         │--------------------│
+ │  - mount(container)│         │  - mount(container)│
+ │  - unmount()       │         │  - unmount()       │
+ │  - emit events     │         │  - emit events     │
+ │  - go(path)        │         │  - go(path)        │
+ │  - onChange(cb)    │         │  - onChange(cb)    │
+ │  - onRouteChange() │         │  - onRouteChange() │
+ │  - use shared store│         │  - use shared store│
+ └────────────────────┘         └────────────────────┘
+```
 
 ---
 

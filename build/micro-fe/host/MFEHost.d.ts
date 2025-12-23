@@ -7,6 +7,10 @@ type HostOptions<S extends Record<string, any> = any> = {
     onRemoteError?: (error: Error) => void;
     isolate?: boolean;
     fallback?: (el: HTMLElement, name: string, error: Error, ctx: MFEContext<S>) => void;
+    onMountStart?: (name: string) => void;
+    onMountEnd?: (name: string) => void;
+    onUnmountStart?: (name: string) => void;
+    onUnmountEnd?: (name: string) => void;
 };
 interface MountOptions {
     isolate?: boolean;
@@ -19,9 +23,16 @@ export declare class MFEHost<S extends Record<string, any> = any> {
     private onRemoteError?;
     private fallback?;
     private isolate;
+    private onMountStart?;
+    private onMountEnd?;
+    private onUnmountStart?;
+    private onUnmountEnd?;
+    private cache;
     constructor(options?: HostOptions<S>);
     /** Load remote JS only */
     load(url: string, global: string): Promise<RemoteApp>;
+    /** Preload remote script */
+    preload(url: string, global: string): Promise<void>;
     /** Mount remote with optional Shadow DOM isolation */
     mount(remote: RemoteApp, el: HTMLElement, name: string, options?: MountOptions): void;
     /** Unmount remote */

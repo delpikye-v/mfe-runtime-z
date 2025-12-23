@@ -1,6 +1,6 @@
 {
   "name": "mfe-runtime-z",
-  "version": "1.1.0",
+  "version": "1.2.1",
   "description": "Framework-agnostic micro-frontend runtime (host, event bus, shared state, router sync)",
   "main": "build/index.js",
   "module": "build/index.esm.js",
@@ -33,14 +33,60 @@
   "homepage": "https://github.com/delpikye-v/mfe-runtime-z#readme",
   "keywords": [
     "micro-frontend",
+    "microfrontend",
     "mfe",
+    "micro-fe",
+
+    "module-federation",
+    "webpack-module-federation",
+    "vite-federation",
+
     "runtime",
-    "event-bus",
-    "shared-state",
-    "router-sync",
-    "framework-agnostic",
+    "runtime-loader",
+    "dynamic-runtime",
     "micro-frontend-runtime",
-    "mfe-runtime"
+    "mfe-runtime",
+
+    "framework-agnostic",
+    "framework-independent",
+    "cross-framework",
+
+    "react",
+    "vue",
+    "angular",
+    "svelte",
+
+    "event-bus",
+    "global-event-bus",
+    "cross-app-events",
+
+    "shared-state",
+    "global-state",
+    "state-sync",
+    "state-sharing",
+
+    "router-sync",
+    "route-sync",
+    "cross-app-routing",
+
+    "isolation",
+    "sandbox",
+    "js-sandbox",
+
+    "lazy-load",
+    "dynamic-import",
+    "remote-module",
+
+    "frontend-architecture",
+    "frontend-platform",
+    "frontend-infrastructure",
+
+    "monorepo",
+    "polyrepo",
+
+    "enterprise-frontend",
+    "scalable-frontend",
+    "large-scale-app"
   ],
   "author": "Delpi.Kye",
   "license": "MIT",
