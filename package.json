@@ -1,0 +1,71 @@
+{
+  "name": "mfe-runtime-z",
+  "version": "1.0.0",
+  "description": "Framework-agnostic micro-frontend runtime (host, event bus, shared state, router sync)",
+  "main": "build/index.js",
+  "module": "build/index.esm.js",
+  "browser": "build/index.js",
+  "unpkg": "build/index.min.js",
+  "types": "build/index.d.ts",
+  "files": [
+    "build"
+  ],
+  "exports": {
+    ".": {
+      "import": "./build/index.esm.js",
+      "require": "./build/index.js"
+    },
+    "./dev": {
+      "import": "./build/dev.esm.js",
+      "require": "./build/dev.js"
+    }
+  },
+  "scripts": {
+    "clean": "rimraf build",
+    "build": "rollup -c",
+    "cb": "npm run clean && npm run build",
+    "prepublishOnly": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/delpikye-v/mfe-runtime-z.git"
+  },
+  "homepage": "https://github.com/delpikye-v/mfe-runtime-z#readme",
+  "keywords": [
+    "micro-frontend",
+    "mfe",
+    "runtime",
+    "event-bus",
+    "shared-state",
+    "router-sync",
+    "framework-agnostic",
+    "micro-frontend-runtime",
+    "mfe-runtime"
+  ],
+  "author": "Delpi.Kye",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/delpikye-v/mfe-runtime-z/issues"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.15.0",
+    "@rollup/plugin-commonjs": "^17.1.0",
+    "@rollup/plugin-node-resolve": "^11.2.1",
+    "babel-loader": "^8.2.2",
+    "rimraf": "^3.0.2",
+    "rollup": "^2.56.3",
+    "rollup-plugin-copy": "^3.4.0",
+    "rollup-plugin-peer-deps-external": "^2.2.4",
+    "rollup-plugin-terser": "^7.0.2",
+    "rollup-plugin-typescript2": "^0.29.0",
+    "tslib": "^2.3.1",
+    "typescript": "^4.4.2",
+    "ws": "^8.18.3"
+  },
+  "optionalDependencies": {
+    "ws": "^8.18.3"
+  },
+  "dependencies": {
+    "eventbus-z": "^2.1.0"
+  }
+}
